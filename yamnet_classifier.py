@@ -180,6 +180,50 @@ class YAMNetClassifier:
         
         return results
     
+    def classify_audio_data(self, audio_data, sample_rate=16000, top_k=5):
+        """
+        Classify audio data directly using YAMNet
+        
+        Args:
+            audio_data (np.ndarray): Audio waveform data
+            sample_rate (int): Sample rate of the audio data
+            top_k (int): Number of top predictions to return
+            
+        Returns:
+            list: List of tuples (class_name, confidence_score)
+        """
+        # Ensure audio data is the right format
+        if len(audio_data) == 0:
+            raise ValueError("Audio data is empty")
+        
+        # Convert to tensor
+        waveform_tensor = tf.convert_to_tensor(audio_data, dtype=tf.float32)
+        
+        # Run inference
+        print("Running inference...")
+        start_time = time.time()
+        scores, embeddings, spectrogram = self.model(waveform_tensor)
+        inference_time = time.time() - start_time
+        print(f"Inference completed in {inference_time:.3f} seconds")
+        
+        # Use sigmoid instead of softmax for multi-label classification
+        prediction = tf.nn.sigmoid(scores)
+        
+        # Average predictions across all time frames
+        mean_prediction = tf.reduce_mean(prediction, axis=0)
+        
+        # Get top k predictions
+        top_indices = tf.nn.top_k(mean_prediction, k=top_k).indices.numpy()
+        top_scores = tf.nn.top_k(mean_prediction, k=top_k).values.numpy()
+        
+        # Format results
+        results = []
+        for i, (idx, score) in enumerate(zip(top_indices, top_scores)):
+            class_name = self.class_names[idx]
+            results.append((class_name, float(score)))
+        
+        return results
+    
     def print_results(self, results, audio_path):
         """Print classification results in a formatted way"""
         print(f"\n{'='*60}")

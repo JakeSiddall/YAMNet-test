@@ -3,3 +3,8 @@ tensorflow-hub>=0.16.0
 librosa>=0.11.0
 numpy>=1.26.0
 pathlib
+pyyaml
+pandas
+sounddevice
+soundfile
+scipy

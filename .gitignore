@@ -51,12 +51,20 @@ checkpoint
 *.index
 *.data-00000-of-00001
 
-# Audio files (if you don't want to commit test audio)
+# Audio files and directories
+audio_files/
 *.wav
 *.mp3
 *.flac
 *.aac
 *.ogg
+*.m4a
+
+# Logs and data files
+logs/
+*.log
+*.csv
+*.json
 
 # IDE
 .vscode/
@@ -84,12 +92,17 @@ Thumbs.db
 .env.test.local
 .env.production.local
 
-# Logs
-*.log
-logs/
-
 # Temporary files
 *.tmp
 *.temp
 temp/
-tmp/ 
+tmp/
+
+# Test files (optional - uncomment if you don't want to commit test files)
+# test_audio_files/
+# test_scripts/
+
+# Performance and profiling files
+*.prof
+*.profile
+*.trace 
