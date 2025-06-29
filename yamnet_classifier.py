@@ -12,10 +12,15 @@ import tensorflow_hub as hub
 import librosa
 import csv
 from pathlib import Path
+import pickle
+import time
 
 class YAMNetClassifier:
-    def __init__(self, cache_dir=None):
+    def __init__(self, cache_dir=None, model_path=None):
         """Initialize YAMNet model and class labels"""
+        self.cache_dir = cache_dir
+        self.model_path = model_path
+        
         # Set up caching directory for TensorFlow Hub
         if cache_dir:
             os.environ['TFHUB_CACHE_DIR'] = cache_dir
@@ -23,23 +28,88 @@ class YAMNetClassifier:
         cache_location = os.environ.get('TFHUB_CACHE_DIR', '~/.cache/tfhub_modules')
         print(f"Using cache directory: {cache_location}")
         
-        print("Loading YAMNet model...")
-        # Load the YAMNet model from TensorFlow Hub (will cache automatically)
-        self.model = hub.load('https://tfhub.dev/google/yamnet/1')
-        
-        # Load class labels
-        self.class_names = self._load_class_names()
+        # Load model and class names
+        self.model, self.class_names = self._load_model_and_classes()
         print(f"Model loaded successfully with {len(self.class_names)} classes")
     
-    def _load_class_names(self):
+    def _load_model_and_classes(self):
+        """Load model and class names with caching"""
+        # Try to load from local cache first
+        if self.cache_dir:
+            model, class_names = self._load_from_local_cache()
+            if model is not None and class_names is not None:
+                print("Loaded model from local cache")
+                return model, class_names
+        
+        # Try to load from local path if provided
+        if self.model_path and Path(self.model_path).exists():
+            print(f"Loading model from local path: {self.model_path}")
+            model = tf.saved_model.load(self.model_path)
+            class_names = self._load_class_names_from_model(model)
+            return model, class_names
+        
+        # Try to load from TensorFlow Hub cache
+        print("Loading YAMNet model from TensorFlow Hub...")
+        start_time = time.time()
+        model = hub.load('https://tfhub.dev/google/yamnet/1')
+        load_time = time.time() - start_time
+        print(f"Model loaded from TensorFlow Hub in {load_time:.2f} seconds")
+        
+        class_names = self._load_class_names_from_model(model)
+        
+        # Cache the model locally for future use
+        if self.cache_dir:
+            self._cache_model_locally(model, class_names)
+        
+        return model, class_names
+    
+    def _load_class_names_from_model(self, model):
         """Load YAMNet class names from the model"""
-        # YAMNet uses AudioSet class names
-        # We'll get them directly from the model
-        class_map_path = self.model.class_map_path().numpy()
+        class_map_path = model.class_map_path().numpy()
         with tf.io.gfile.GFile(class_map_path) as csvfile:
             reader = csv.DictReader(csvfile)
             class_names = [row['display_name'] for row in reader]
         return class_names
+    
+    def _cache_model_locally(self, model, class_names):
+        """Cache model and class names locally for faster loading"""
+        cache_path = Path(self.cache_dir) / "yamnet_local"
+        cache_path.mkdir(exist_ok=True)
+        
+        # Save the model
+        model_save_path = cache_path / "model"
+        tf.saved_model.save(model, str(model_save_path))
+        
+        # Save class names
+        class_names_path = cache_path / "class_names.pkl"
+        with open(class_names_path, 'wb') as f:
+            pickle.dump(class_names, f)
+        
+        print(f"Model cached locally at: {cache_path}")
+    
+    def _load_from_local_cache(self):
+        """Load model and class names from local cache"""
+        cache_path = Path(self.cache_dir) / "yamnet_local"
+        
+        if not cache_path.exists():
+            return None, None
+        
+        # Load model
+        model_path = cache_path / "model"
+        if not model_path.exists():
+            return None, None
+        
+        model = tf.saved_model.load(str(model_path))
+        
+        # Load class names
+        class_names_path = cache_path / "class_names.pkl"
+        if not class_names_path.exists():
+            return None, None
+        
+        with open(class_names_path, 'rb') as f:
+            class_names = pickle.load(f)
+        
+        return model, class_names
     
     def preprocess_audio(self, audio_path, target_sr=16000):
         """
@@ -87,7 +157,10 @@ class YAMNetClassifier:
         
         # Run inference
         print("Running inference...")
+        start_time = time.time()
         scores, embeddings, spectrogram = self.model(waveform_tensor)
+        inference_time = time.time() - start_time
+        print(f"Inference completed in {inference_time:.3f} seconds")
         
         # Use sigmoid instead of softmax for multi-label classification
         prediction = tf.nn.sigmoid(scores)
