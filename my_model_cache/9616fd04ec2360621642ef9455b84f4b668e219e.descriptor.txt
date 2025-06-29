@@ -1,3 +1,0 @@
-Module: https://tfhub.dev/google/yamnet/1
-Download Time: 2025-06-28 10:19:18.218855
-Downloader Hostname: MacBookAir.attlocal.net (PID:28737)
